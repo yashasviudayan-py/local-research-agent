@@ -3,7 +3,6 @@
 > An autonomous AI-powered research agent that performs deep web research and generates comprehensive, cited reports—completely locally on your machine.
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![LangGraph](https://img.shields.io/badge/LangGraph-StateGraph-green.svg)](https://github.com/langchain-ai/langgraph)
 [![Crawl4AI](https://img.shields.io/badge/Crawl4AI-Async-orange.svg)](https://github.com/unclecode/crawl4ai)
 
