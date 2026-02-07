@@ -465,11 +465,6 @@ Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for:
 5. Open a Pull Request
 
 ---
-
-## 📄 License
-
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
-
 ---
 
 ## 🙏 Acknowledgments
