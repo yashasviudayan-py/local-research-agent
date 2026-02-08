@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment Variables
+.env
+.env.local
+
+# Generated Reports
+final_report.md
+output.md
+reports/
+
+# Logs
+*.log
+logs/
+
+# Docker
+.docker/
+
+# Ollama (if running locally)
+.ollama/
+
+# Playwright
+playwright-report/
+test-results/
+
+# OS
+Thumbs.db
+
+# Claude Plans
+.claude/plans/

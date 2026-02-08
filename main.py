@@ -43,14 +43,19 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import sys
 import time
 from pathlib import Path
 from typing import Any, Optional
 
 from typing_extensions import TypedDict
+from dotenv import load_dotenv
 
 from langgraph.graph import END, START, StateGraph
+
+# Load environment variables from .env file (if present)
+load_dotenv()
 
 # ──────────────────────────────────────────────────────────────────────
 # Local module imports
@@ -117,7 +122,7 @@ async def search_node(state: ResearchState) -> dict[str, Any]:
     topic = state["topic"]
     logger.info("🔍  SEARCH NODE — topic: %r", topic)
 
-    searcher = DeepSearcher(_searcher_config)
+    searcher = DeepSearcher(_searcher_config, progress_callback=_progress_callback)
     report = await searcher.search(topic)
 
     logger.info(
@@ -150,7 +155,7 @@ async def scrape_node(state: ResearchState) -> dict[str, Any]:
     scraped: dict[str, str] = {}
     errors: dict[str, str] = {}
 
-    async with DeepFetcher(_fetcher_config) as fetcher:
+    async with DeepFetcher(_fetcher_config, progress_callback=_progress_callback) as fetcher:
         results = await fetcher.fetch_many(urls)
 
     for result in results:
@@ -281,37 +286,38 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-o", "--output",
         type=str,
-        default="final_report.md",
-        help="Output path for the report (default: final_report.md).",
+        default=os.getenv("OUTPUT_FILE", "final_report.md"),
+        help="Output path for the report (default: final_report.md or $OUTPUT_FILE).",
     )
     parser.add_argument(
         "-m", "--model",
         type=str,
-        default="llama3.1:8b-instruct-q8_0",
-        help="Ollama model name.",
+        default=os.getenv("OLLAMA_MODEL", "llama3.1:8b-instruct-q8_0"),
+        help="Ollama model name (default: $OLLAMA_MODEL or llama3.1:8b-instruct-q8_0).",
     )
     parser.add_argument(
         "--host",
         type=str,
-        default="http://localhost:11434",
-        help="Ollama server URL.",
+        default=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
+        help="Ollama server URL (default: $OLLAMA_HOST or http://localhost:11434).",
     )
     parser.add_argument(
         "-n", "--num-queries",
         type=int,
-        default=3,
-        help="Number of search queries to generate (default: 3).",
+        default=int(os.getenv("SEARCH_NUM_QUERIES", "3")),
+        help="Number of search queries to generate (default: $SEARCH_NUM_QUERIES or 3).",
     )
     parser.add_argument(
         "--top",
         type=int,
-        default=3,
-        help="Results per search query (default: 3).",
+        default=int(os.getenv("SEARCH_RESULTS_PER_QUERY", "3")),
+        help="Results per search query (default: $SEARCH_RESULTS_PER_QUERY or 3).",
     )
     parser.add_argument(
         "-v", "--verbose",
         action="store_true",
-        help="Enable detailed logging.",
+        default=os.getenv("VERBOSE", "false").lower() == "true",
+        help="Enable detailed logging (default: $VERBOSE or false).",
     )
     return parser
 
@@ -338,38 +344,28 @@ def resolve_topic(args_topic: Optional[str]) -> str:
 # ══════════════════════════════════════════════════════════════════════
 _searcher_config: SearcherConfig = SearcherConfig()
 _fetcher_config: FetcherConfig = FetcherConfig()
+_progress_callback = None
 
 
 # ══════════════════════════════════════════════════════════════════════
-# 8. ENTRY-POINT
+# 8. REUSABLE PIPELINE (used by both CLI and web API)
 # ══════════════════════════════════════════════════════════════════════
-async def async_main(args: argparse.Namespace) -> None:
-    """Run the full research pipeline."""
-    global _searcher_config, _fetcher_config
+async def run_research(
+    topic: str,
+    searcher_config: SearcherConfig,
+    fetcher_config: FetcherConfig,
+    progress_callback=None,
+) -> dict[str, Any]:
+    """Run the research pipeline. Returns the final state dict.
 
-    _configure_logging(verbose=args.verbose)
-    topic = resolve_topic(args.topic)
-    output_path = Path(args.output)
-
-    # ── Set module-level configs for nodes ─────────────────────────────
-    _searcher_config = SearcherConfig(
-        model=args.model,
-        ollama_host=args.host,
-        num_queries=args.num_queries,
-        results_per_query=args.top,
-    )
-    _fetcher_config = FetcherConfig(verbose=args.verbose)
-
-    # ── Build and run the graph ───────────────────────────────────────
-    print(f"\n{'═' * 64}")
-    print(f"  🧠  RESEARCH AGENT")
-    print(f"  📋  Topic : {topic}")
-    print(f"  🤖  Model : {args.model}")
-    print(f"  📊  Queries: {args.num_queries} × {args.top} results each")
-    print(f"{'═' * 64}\n")
+    This is the shared core used by both CLI and web API.
+    """
+    global _searcher_config, _fetcher_config, _progress_callback
+    _searcher_config = searcher_config
+    _fetcher_config = fetcher_config
+    _progress_callback = progress_callback
 
     app = build_graph()
-
     initial_state: ResearchState = {
         "topic": topic,
         "urls": [],
@@ -380,8 +376,36 @@ async def async_main(args: argparse.Namespace) -> None:
 
     t0 = time.perf_counter()
     final_state = await app.ainvoke(initial_state)
-    elapsed = (time.perf_counter() - t0) * 1000
-    final_state["elapsed_ms"] = elapsed
+    final_state["elapsed_ms"] = (time.perf_counter() - t0) * 1000
+    return final_state
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 9. CLI ENTRY-POINT
+# ══════════════════════════════════════════════════════════════════════
+async def async_main(args: argparse.Namespace) -> None:
+    """Run the full research pipeline from CLI."""
+    _configure_logging(verbose=args.verbose)
+    topic = resolve_topic(args.topic)
+    output_path = Path(args.output)
+
+    searcher_config = SearcherConfig(
+        model=args.model,
+        ollama_host=args.host,
+        num_queries=args.num_queries,
+        results_per_query=args.top,
+    )
+    fetcher_config = FetcherConfig(verbose=args.verbose)
+
+    # ── Banner ────────────────────────────────────────────────────────
+    print(f"\n{'═' * 64}")
+    print(f"  🧠  RESEARCH AGENT")
+    print(f"  📋  Topic : {topic}")
+    print(f"  🤖  Model : {args.model}")
+    print(f"  📊  Queries: {args.num_queries} × {args.top} results each")
+    print(f"{'═' * 64}\n")
+
+    final_state = await run_research(topic, searcher_config, fetcher_config)
 
     # ── Generate and save report ──────────────────────────────────────
     report = generate_report(final_state)
@@ -391,6 +415,7 @@ async def async_main(args: argparse.Namespace) -> None:
     scraped = final_state.get("scraped_content", {})
     errors = final_state.get("errors", {})
     urls = final_state.get("urls", [])
+    elapsed = final_state.get("elapsed_ms", 0)
 
     print(f"\n{'═' * 64}")
     print(f"  ✅  PIPELINE COMPLETE")

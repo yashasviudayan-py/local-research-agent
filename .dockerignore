@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual Environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation (not needed in runtime)
+README.md
+spec.md
+CONTRIBUTING.md
+LICENSE
+DOCKER.md
+
+# Output files (generated at runtime)
+final_report.md
+output.md
+*.md
+reports/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.local
+.env.template
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Docker
+.docker/
+
+# Verification script
+verify-docker.sh
+
+# Plans
+.claude/

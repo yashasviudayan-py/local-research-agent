@@ -48,6 +48,10 @@ import re
 import sys
 import time
 from dataclasses import dataclass
+from dotenv import load_dotenv
+
+# Load environment variables from .env file (if present)
+load_dotenv()
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
@@ -140,15 +144,15 @@ def validate_url(url: str) -> str:
 class FetcherConfig:
     """Tuneable knobs — safe defaults optimised for Apple Silicon M4 Pro."""
 
-    headless: bool = True
-    verbose: bool = False
+    headless: bool = os.getenv("SCRAPER_HEADLESS", "true").lower() == "true"
+    verbose: bool = os.getenv("VERBOSE", "false").lower() == "true"
 
     # Browser / page behaviour
-    page_timeout: int = 30_000          # ms – navigation ceiling
-    request_timeout: int = 15_000       # ms – per-request ceiling
+    page_timeout: int = int(os.getenv("SCRAPER_PAGE_TIMEOUT", "30000"))
+    request_timeout: int = int(os.getenv("SCRAPER_REQUEST_TIMEOUT", "15000"))
 
     # PruningContentFilter
-    pruning_threshold: float = 0.48
+    pruning_threshold: float = float(os.getenv("SCRAPER_PRUNING_THRESHOLD", "0.48"))
     pruning_threshold_type: str = "fixed"
     min_word_threshold: int = 30
 
@@ -159,12 +163,12 @@ class FetcherConfig:
     )
 
     # Retry / resilience
-    max_retries: int = 2
+    max_retries: int = int(os.getenv("SCRAPER_MAX_RETRIES", "2"))
     retry_backoff: float = 0.5
 
     # Concurrency ceiling (keeps memory stable on unified-memory Macs)
-    semaphore_limit: int = 6
-    cache_mode: str = "BYPASS"
+    semaphore_limit: int = int(os.getenv("SCRAPER_SEMAPHORE_LIMIT", "6"))
+    cache_mode: str = os.getenv("CACHE_MODE", "BYPASS")
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -199,8 +203,9 @@ class DeepFetcher:
             print(result.raw_markdown)
     """
 
-    def __init__(self, config: FetcherConfig | None = None) -> None:
+    def __init__(self, config: FetcherConfig | None = None, progress_callback=None) -> None:
         self._cfg = config or FetcherConfig()
+        self._progress = progress_callback
         self._crawler: Optional[AsyncWebCrawler] = None
         self._semaphore = asyncio.Semaphore(self._cfg.semaphore_limit)
 
@@ -362,7 +367,22 @@ class DeepFetcher:
 
     async def fetch_many(self, urls: list[str]) -> list[FetchResult]:
         """Fetch multiple URLs concurrently (semaphore-bounded)."""
-        return await asyncio.gather(*(self.fetch(u) for u in urls))
+        tasks = [asyncio.ensure_future(self.fetch(u)) for u in urls]
+        results: list[FetchResult] = []
+        total = len(tasks)
+        for i, coro in enumerate(asyncio.as_completed(tasks), 1):
+            result = await coro
+            results.append(result)
+            if self._progress:
+                self._progress("scrape_progress", {
+                    "url": result.url,
+                    "success": result.success,
+                    "chars": len(result.raw_markdown or ""),
+                    "elapsed_ms": result.elapsed_ms,
+                    "completed": i,
+                    "total": total,
+                })
+        return results
 
 
 # ──────────────────────────────────────────────────────────────────────

@@ -1,0 +1,47 @@
+[project]
+name = "local-research-agent"
+version = "1.0.0"
+description = "Autonomous AI-powered research agent with web UI — runs entirely locally"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+authors = [
+    { name = "Yashasvi Udayan" },
+]
+keywords = ["research", "llm", "langgraph", "ollama", "web-scraping", "ai-agent"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "langgraph>=1.0.0",
+    "langgraph-checkpoint>=4.0.0",
+    "langgraph-prebuilt>=1.0.0",
+    "ollama>=0.6.0",
+    "ddgs>=9.0.0",
+    "crawl4ai>=0.8.0",
+    "playwright>=1.58.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "jinja2>=3.1.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+research-agent = "main:main"
+
+[project.urls]
+Homepage = "https://github.com/yashasviudayan-py/local-research-agent"
+Repository = "https://github.com/yashasviudayan-py/local-research-agent"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"

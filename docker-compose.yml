@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # Ollama LLM Service
+  # ============================================================================
+  ollama:
+    image: ollama/ollama:0.6
+    container_name: research-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      # Persist models between container restarts (~8GB for llama3.1:8b)
+      - ollama_models:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=5m
+      - OLLAMA_NUM_PARALLEL=4
+      - OLLAMA_MAX_LOADED_MODELS=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - research-net
+    # Uncomment for GPU support on Linux with NVIDIA
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # ============================================================================
+  # Research Agent Service
+  # ============================================================================
+  research-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: research-agent
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      # Ollama Configuration
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1:8b-instruct-q8_0}
+      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-60.0}
+
+      # Search Configuration
+      - SEARCH_NUM_QUERIES=${SEARCH_NUM_QUERIES:-3}
+      - SEARCH_RESULTS_PER_QUERY=${SEARCH_RESULTS_PER_QUERY:-3}
+      - SEARCH_REGION=${SEARCH_REGION:-wt-wt}
+      - SEARCH_SAFESEARCH=${SEARCH_SAFESEARCH:-moderate}
+      - SEARCH_TIMELIMIT=${SEARCH_TIMELIMIT:-}
+
+      # Scraper Configuration
+      - SCRAPER_HEADLESS=${SCRAPER_HEADLESS:-true}
+      - SCRAPER_PAGE_TIMEOUT=${SCRAPER_PAGE_TIMEOUT:-30000}
+      - SCRAPER_REQUEST_TIMEOUT=${SCRAPER_REQUEST_TIMEOUT:-15000}
+      - SCRAPER_PRUNING_THRESHOLD=${SCRAPER_PRUNING_THRESHOLD:-0.48}
+      - SCRAPER_MAX_RETRIES=${SCRAPER_MAX_RETRIES:-2}
+      - SCRAPER_SEMAPHORE_LIMIT=${SCRAPER_SEMAPHORE_LIMIT:-6}
+
+      # Output Configuration
+      - OUTPUT_FILE=${OUTPUT_FILE:-/app/reports/final_report.md}
+      - VERBOSE=${VERBOSE:-false}
+
+      # Performance
+      - MAX_CONCURRENT_SEARCHES=${MAX_CONCURRENT_SEARCHES:-3}
+      - CACHE_MODE=${CACHE_MODE:-BYPASS}
+    volumes:
+      # Mount output directory for generated reports
+      - ./reports:/app/reports
+    networks:
+      - research-net
+    # Keep container running for manual invocation
+    stdin_open: true
+    tty: true
+    command: ["--help"]
+    restart: unless-stopped
+
+volumes:
+  ollama_models:
+    driver: local
+
+networks:
+  research-net:
+    driver: bridge

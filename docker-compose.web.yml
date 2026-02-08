@@ -1,0 +1,7 @@
+services:
+  research-agent:
+    ports:
+      - "8000:8000"
+    command: ["python", "run_web.py"]
+    stdin_open: false
+    tty: false

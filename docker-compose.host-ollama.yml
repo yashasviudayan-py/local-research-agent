@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # Research Agent — Web UI (connects to host Ollama)
+  #
+  # Usage:
+  #   docker compose -f docker-compose.host-ollama.yml up
+  #   Open http://localhost:8000
+  #
+  # CLI mode (one-shot):
+  #   docker compose -f docker-compose.host-ollama.yml run --rm research-agent \
+  #     python main.py "your topic"
+  # ============================================================================
+  research-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: research-agent
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    environment:
+      # Point to host Ollama (Mac/Windows use host.docker.internal)
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1:8b-instruct-q8_0}
+      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-60.0}
+
+      # Search Configuration
+      - SEARCH_NUM_QUERIES=${SEARCH_NUM_QUERIES:-3}
+      - SEARCH_RESULTS_PER_QUERY=${SEARCH_RESULTS_PER_QUERY:-3}
+      - SEARCH_REGION=${SEARCH_REGION:-wt-wt}
+      - SEARCH_SAFESEARCH=${SEARCH_SAFESEARCH:-moderate}
+      - SEARCH_TIMELIMIT=${SEARCH_TIMELIMIT:-}
+
+      # Scraper Configuration
+      - SCRAPER_HEADLESS=${SCRAPER_HEADLESS:-true}
+      - SCRAPER_PAGE_TIMEOUT=${SCRAPER_PAGE_TIMEOUT:-30000}
+      - SCRAPER_REQUEST_TIMEOUT=${SCRAPER_REQUEST_TIMEOUT:-15000}
+      - SCRAPER_PRUNING_THRESHOLD=${SCRAPER_PRUNING_THRESHOLD:-0.48}
+      - SCRAPER_MAX_RETRIES=${SCRAPER_MAX_RETRIES:-2}
+      - SCRAPER_SEMAPHORE_LIMIT=${SCRAPER_SEMAPHORE_LIMIT:-6}
+
+      # Output Configuration
+      - OUTPUT_FILE=${OUTPUT_FILE:-/app/reports/final_report.md}
+      - VERBOSE=${VERBOSE:-false}
+
+      # Performance
+      - MAX_CONCURRENT_SEARCHES=${MAX_CONCURRENT_SEARCHES:-3}
+      - CACHE_MODE=${CACHE_MODE:-BYPASS}
+
+      # Web
+      - WEB_HOST=0.0.0.0
+      - WEB_PORT=8000
+    volumes:
+      # Mount output directory for generated reports
+      - ./reports:/app/reports
+    extra_hosts:
+      # For Linux: enables host.docker.internal
+      # For Mac/Windows: this is automatic in Docker Desktop
+      - "host.docker.internal:host-gateway"
+    # Web UI mode (default)
+    entrypoint: ["python", "run_web.py"]
+    command: []
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped

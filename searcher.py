@@ -43,11 +43,16 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import re
 import sys
 import time
 from dataclasses import dataclass, field
 from typing import Optional
+from dotenv import load_dotenv
+
+# Load environment variables from .env file (if present)
+load_dotenv()
 
 import ollama
 from ddgs import DDGS
@@ -105,22 +110,22 @@ class SearcherConfig:
     """Tuneable knobs for DeepSearcher."""
 
     # Ollama
-    model: str = "llama3.1:8b-instruct-q8_0"
-    ollama_host: str = "http://localhost:11434"
-    ollama_timeout: float = 60.0        # seconds
+    model: str = os.getenv("OLLAMA_MODEL", "llama3.1:8b-instruct-q8_0")
+    ollama_host: str = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    ollama_timeout: float = float(os.getenv("OLLAMA_TIMEOUT", "60.0"))
 
     # Query generation
-    num_queries: int = 3
+    num_queries: int = int(os.getenv("SEARCH_NUM_QUERIES", "3"))
     temperature: float = 0.7            # higher = more diverse queries
 
     # DuckDuckGo
-    results_per_query: int = 3
-    search_region: str = "wt-wt"
-    search_safesearch: str = "moderate"
-    search_timelimit: Optional[str] = None  # d, w, m, y or None
+    results_per_query: int = int(os.getenv("SEARCH_RESULTS_PER_QUERY", "3"))
+    search_region: str = os.getenv("SEARCH_REGION", "wt-wt")
+    search_safesearch: str = os.getenv("SEARCH_SAFESEARCH", "moderate")
+    search_timelimit: Optional[str] = os.getenv("SEARCH_TIMELIMIT", None)
 
     # Concurrency
-    max_concurrent_searches: int = 3
+    max_concurrent_searches: int = int(os.getenv("MAX_CONCURRENT_SEARCHES", "3"))
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -162,12 +167,18 @@ class DeepSearcher:
             print(url)
     """
 
-    def __init__(self, config: SearcherConfig | None = None) -> None:
+    def __init__(self, config: SearcherConfig | None = None, progress_callback=None) -> None:
         self._cfg = config or SearcherConfig()
+        self._progress = progress_callback
         self._client = ollama.AsyncClient(
             host=self._cfg.ollama_host,
             timeout=self._cfg.ollama_timeout,
         )
+
+    def _emit(self, event_type: str, data: dict) -> None:
+        """Fire progress callback if registered."""
+        if self._progress:
+            self._progress(event_type, data)
 
     # ── query generation (Ollama) ─────────────────────────────────────
 
@@ -228,6 +239,7 @@ class DeepSearcher:
         logger.info(
             "Generated %d queries: %s", len(queries), queries,
         )
+        self._emit("queries", {"queries": queries})
         return queries
 
     @staticmethod
@@ -369,6 +381,11 @@ class DeepSearcher:
                 if normalised not in seen_urls:
                     seen_urls.add(normalised)
                     unique_urls.append(result.url)
+                    self._emit("url_found", {
+                        "url": result.url,
+                        "title": result.title,
+                        "query": result.source_query,
+                    })
 
         elapsed = (time.perf_counter() - t0) * 1000
 

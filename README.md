@@ -1,492 +1,418 @@
-# 🧠 Local Research Agent
+# Local Research Agent
 
-> An autonomous AI-powered research agent that performs deep web research and generates comprehensive, cited reports—completely locally on your machine.
+> Autonomous AI-powered research agent with a web interface — runs entirely on your machine.
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-async-009688.svg)](https://fastapi.tiangolo.com/)
 [![LangGraph](https://img.shields.io/badge/LangGraph-StateGraph-green.svg)](https://github.com/langchain-ai/langgraph)
 [![Crawl4AI](https://img.shields.io/badge/Crawl4AI-Async-orange.svg)](https://github.com/unclecode/crawl4ai)
-
-## 📋 Table of Contents
-
-- [Overview](#overview)
-- [Features](#features)
-- [Architecture](#architecture)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Usage](#usage)
-- [Configuration](#configuration)
-- [Project Structure](#project-structure)
-- [How It Works](#how-it-works)
-- [Examples](#examples)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [License](#license)
-- [Acknowledgments](#acknowledgments)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
-## 🎯 Overview
+## Overview
 
-**Local Research Agent** is a sophisticated autonomous research assistant built with **LangGraph** that orchestrates an end-to-end research pipeline:
+**Local Research Agent** takes a research topic, generates diverse search queries using a local LLM, searches the web, scrapes and extracts content, and compiles everything into a comprehensive markdown report — all through a sleek dark-mode web interface at `http://localhost:8000`.
 
-1. **Query Generation**: Uses local LLM (Llama 3.1 via Ollama) to generate diverse, multi-angle search queries
-2. **Web Search**: Executes parallel searches on DuckDuckGo to gather relevant URLs
-3. **Content Extraction**: Scrapes web pages using Crawl4AI with intelligent content filtering
-4. **Report Generation**: Compiles findings into a structured, citation-rich markdown report
-
-**Privacy-First**: All processing happens on your MacBook Pro M4 (or any Apple Silicon Mac) — no data leaves your machine.
-
----
-
-## ✨ Features
-
-- 🤖 **LLM-Powered Query Generation**: Automatically generates diverse search queries from a single research topic
-- 🔍 **Parallel Web Search**: Concurrent DuckDuckGo searches with deduplication
-- 📄 **Intelligent Scraping**: Crawl4AI with PruningContentFilter extracts clean markdown from web pages
-- ⚡ **Optimized for Apple Silicon**: Metal-accelerated inference on M-series chips
-- 🔄 **LangGraph Orchestration**: Stateful, multi-node research pipeline
-- 📊 **Structured Reporting**: Auto-generated markdown reports with citations and metrics
-- 🎛️ **Highly Configurable**: Tunable parameters for queries, search depth, timeouts, and more
-- 🛡️ **Robust Error Handling**: Retry logic, timeout management, and graceful degradation
-
----
-
-## 🏗️ Architecture
+**Privacy-first**: Every component runs locally. No data leaves your machine. No API keys. No cloud services. $0 cost.
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│                     LANGGRAPH STATE GRAPH                      │
-│                                                                │
-│  START → search_node → scrape_node → END → final_report.md    │
-│            │              │                                    │
-│            ▼              ▼                                    │
-│      ┌─────────┐    ┌──────────┐                              │
-│      │ Ollama  │    │ Crawl4AI │                              │
-│      │ Llama3  │    │  (async) │                              │
-│      └─────────┘    └──────────┘                              │
-│            │              │                                    │
-│            ▼              ▼                                    │
-│    ┌─────────────┐  ┌──────────────┐                          │
-│    │ DuckDuckGo  │  │ PruningFilter│                          │
-│    │   Search    │  │  + Markdown  │                          │
-│    └─────────────┘  └──────────────┘                          │
-└────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│  Local Research Agent — Web UI (dark mode)               │
+│                                                          │
+│  ┌─ Sidebar ─┐  ┌─────────────────────────────────────┐ │
+│  │ History   │  │                                     │ │
+│  │ > Report 1│  │   "What would you like to research?"│ │
+│  │ > Report 2│  │                                     │ │
+│  │           │  │   [ Example topic chips... ]         │ │
+│  │           │  │                                     │ │
+│  └───────────┘  │   ┌─────────────────────────┐       │ │
+│                 │   │ Enter a research topic ▶│       │ │
+│                 │   └─────────────────────────┘       │ │
+│                 └─────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Features
+
+**Web Interface**
+- Dark-mode UI with jet-black background and SF font
+- Chat-like input at the bottom center
+- Real-time progress streaming (SSE) — see queries, URLs, and scraping live
+- Sliding sidebar with report history
+- Animated example topic suggestions
+- Download and delete reports from the browser
+
+**Research Pipeline**
+- LLM-powered multi-angle query generation via Ollama (Llama 3.1)
+- Parallel DuckDuckGo searches with URL deduplication
+- Concurrent web scraping with Crawl4AI and intelligent content filtering
+- Structured markdown reports with citations and metrics
+
+**Production Ready**
+- Fully containerized with Docker Compose
+- Input validation and path traversal protection
+- Structured logging and global error handling
+- Non-root container execution
+- CLI mode for scripting and automation
+
+---
+
+## Architecture
+
+```
+Browser (http://localhost:8000)
+  │
+  │  GET  /                         → Dark-mode SPA
+  │  POST /api/research             → Start research job
+  │  GET  /api/research/{id}/stream → SSE real-time progress
+  │  GET  /api/reports              → List saved reports
+  │  GET  /api/reports/{id}         → Get report content
+  │  DELETE /api/reports/{id}       → Delete report
+  │  GET  /api/health               → Check Ollama connectivity
+  │
+  ▼
+FastAPI Server (web/server.py)
+  │
+  ▼
+Job Runner (web/runner.py)
+  │  asyncio.Lock — one job at a time
+  │  asyncio.Queue — progress events → SSE
+  │
+  ▼
+LangGraph Pipeline (main.py)
+  │
+  │  START → search_node → scrape_node → END
+  │            │              │
+  │            ▼              ▼
+  │      DeepSearcher    DeepFetcher
+  │      ┌─────────┐    ┌──────────┐
+  │      │ Ollama  │    │ Crawl4AI │
+  │      │  + DDG  │    │  (async) │
+  │      └─────────┘    └──────────┘
+  │
+  ▼
+Report Store (reports/*.md + *.json)
 ```
 
 ### Core Components
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| **Orchestrator** | [LangGraph](https://github.com/langchain-ai/langgraph) | Manages the stateful research workflow |
-| **Brain** | [Ollama](https://ollama.ai/) + Llama 3.1-8B | Local LLM for query generation |
-| **Search** | [DuckDuckGo Search](https://pypi.org/project/duckduckgo-search/) | Privacy-focused web search |
-| **Scraper** | [Crawl4AI](https://github.com/unclecode/crawl4ai) | Async web crawler with markdown extraction |
+| **Web UI** | Vanilla JS + CSS | Dark-mode SPA with real-time progress |
+| **API** | [FastAPI](https://fastapi.tiangolo.com/) + SSE | Async REST API with streaming |
+| **Orchestrator** | [LangGraph](https://github.com/langchain-ai/langgraph) | Stateful research pipeline |
+| **LLM** | [Ollama](https://ollama.ai/) + Llama 3.1-8B | Local query generation |
+| **Search** | [DuckDuckGo](https://pypi.org/project/ddgs/) | Privacy-focused web search |
+| **Scraper** | [Crawl4AI](https://github.com/unclecode/crawl4ai) | Async web crawler with content filtering |
 
 ---
 
-## 📦 Prerequisites
+## Quick Start
 
-### System Requirements
-- **Hardware**: MacBook Pro with Apple Silicon (M1/M2/M3/M4) or any x86 system with sufficient RAM
-- **OS**: macOS 12.0+ (optimized for Apple Silicon) or Linux
-- **RAM**: Minimum 8GB (16GB+ recommended for larger models)
-- **Storage**: ~8GB for Llama 3.1-8B model
+### Prerequisites
 
-### Software Dependencies
-- **Python**: 3.9 or higher
-- **Ollama**: For running local LLM ([Install Ollama](https://ollama.ai/))
-- **Git**: For cloning the repository
+- **Ollama** — [Install Ollama](https://ollama.ai/) and pull a model:
+  ```bash
+  ollama serve
+  ollama pull llama3.1:8b-instruct-q8_0
+  ```
+- **Docker** (recommended) or **Python 3.9+**
 
 ---
 
-## 🚀 Installation
+### Docker (Recommended)
 
-### 1. Clone the Repository
 ```bash
+# 1. Clone
 git clone https://github.com/yashasviudayan-py/local-research-agent.git
 cd local-research-agent
+
+# 2. Build
+docker build -t research-agent:latest .
+
+# 3. Run (make sure Ollama is running on your host)
+docker compose -f docker-compose.host-ollama.yml up
+
+# 4. Open http://localhost:8000
 ```
 
-### 2. Create a Virtual Environment (Recommended)
-```bash
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
+---
 
-### 3. Install Python Dependencies
+### Python Native
+
 ```bash
-pip install --upgrade pip
+# 1. Clone
+git clone https://github.com/yashasviudayan-py/local-research-agent.git
+cd local-research-agent
+
+# 2. Install
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-```
-
-### 4. Set Up Crawl4AI
-```bash
 crawl4ai-setup
+
+# 3. Run
+python run_web.py
+
+# 4. Open http://localhost:8000
 ```
-
-### 5. Install and Configure Ollama
-
-#### Install Ollama
-```bash
-# macOS / Linux
-curl -fsSL https://ollama.ai/install.sh | sh
-```
-
-#### Start Ollama Server
-```bash
-ollama serve
-```
-
-#### Pull Llama 3.1 Model (in a new terminal)
-```bash
-ollama pull llama3.1:8b-instruct-q8_0
-```
-
-> **Note**: The model download is ~8GB and may take several minutes depending on your internet speed.
 
 ---
 
-## 🎬 Quick Start
+### CLI Mode
 
-### Interactive Mode
-Simply run the agent without arguments to be prompted for a research topic:
+For scripting or terminal-only workflows:
 
 ```bash
+# Interactive
 python main.py
-```
 
-You'll see:
-```
-🧠  Enter research topic:
-```
-
-Type your research question (e.g., `impact of LLMs on drug discovery`) and press Enter.
-
-### Command-Line Mode
-Pass the research topic directly as an argument:
-
-```bash
+# Direct
 python main.py "impact of LLMs on drug discovery"
-```
 
-### Example Output
-```
-════════════════════════════════════════════════════════════════
-  🧠  RESEARCH AGENT
-  📋  Topic : impact of LLMs on drug discovery
-  🤖  Model : llama3.1:8b-instruct-q8_0
-  📊  Queries: 3 × 3 results each
-════════════════════════════════════════════════════════════════
-
-🔍  SEARCH NODE — generating queries…
-✅  Generated 3 queries
-📄  SCRAPE NODE — fetching 9 URLs in parallel…
-✅  Scraped 7 pages, 2 failed
-
-════════════════════════════════════════════════════════════════
-  ✅  PIPELINE COMPLETE
-  ⏱   Total time     : 18,423 ms
-  🔗  URLs found     : 9
-  📄  Pages scraped  : 7
-  ❌  Failed         : 2
-  📝  Report chars   : 45,123
-  💾  Saved to       : /path/to/final_report.md
-════════════════════════════════════════════════════════════════
-```
-
-The report will be saved as [`final_report.md`](final_report.md) with:
-- Auto-generated table of contents
-- Scraped content from each successful URL
-- Metadata (timing, success/failure counts)
-- Citations for every source
-
----
-
-## 📖 Usage
-
-### Basic Usage
-```bash
-python main.py "your research topic here"
-```
-
-### Advanced Options
-
-```bash
-# Verbose mode with custom model
-python main.py -v --model llama3.1 "quantum computing breakthroughs"
-
-# Custom number of queries and results per query
-python main.py --num-queries 5 --top 5 "renewable energy storage"
-
-# Custom output file
-python main.py -o my_report.md "artificial general intelligence timeline"
-
-# Full example with all options
-python main.py \
-  -v \
-  --model llama3.1:8b-instruct-q8_0 \
-  --host http://localhost:11434 \
-  --num-queries 4 \
-  --top 3 \
-  -o custom_report.md \
-  "climate change mitigation strategies"
-```
-
-### Command-Line Arguments
-
-| Argument | Short | Type | Default | Description |
-|----------|-------|------|---------|-------------|
-| `topic` | - | `str` | (prompt) | Research topic (optional positional) |
-| `--output` | `-o` | `str` | `final_report.md` | Output path for the report |
-| `--model` | `-m` | `str` | `llama3.1:8b-instruct-q8_0` | Ollama model name |
-| `--host` | - | `str` | `http://localhost:11434` | Ollama server URL |
-| `--num-queries` | `-n` | `int` | `3` | Number of search queries to generate |
-| `--top` | - | `int` | `3` | Results per search query |
-| `--verbose` | `-v` | flag | `False` | Enable detailed logging |
-
-### Running Individual Components
-
-#### Test the Searcher
-```bash
-python searcher.py "machine learning explainability"
-```
-
-#### Test the Scraper
-```bash
-python scraper.py https://example.com
+# With options
+python main.py -v --num-queries 5 --top 5 -o report.md "quantum computing"
 ```
 
 ---
 
-## ⚙️ Configuration
+## Web Interface
 
-### Searcher Configuration ([searcher.py](searcher.py))
+### Research Flow
 
-```python
-SearcherConfig(
-    model="llama3.1:8b-instruct-q8_0",
-    ollama_host="http://localhost:11434",
-    ollama_timeout=60.0,
-    num_queries=3,
-    temperature=0.7,
-    results_per_query=3,
-    search_region="wt-wt",
-    search_safesearch="moderate",
-    search_timelimit=None,  # Options: "d", "w", "m", "y", None
-    max_concurrent_searches=3,
-)
-```
+1. **Enter a topic** in the input bar at the bottom (or click an example topic)
+2. **Watch real-time progress** — queries generated, URLs discovered, pages scraped
+3. **View the report** — rendered markdown with metadata and download option
+4. **Browse history** — open the sidebar to see and revisit past reports
 
-### Fetcher Configuration ([scraper.py](scraper.py))
+### Settings
 
-```python
-FetcherConfig(
-    headless=True,
-    verbose=False,
-    page_timeout=30_000,          # ms
-    request_timeout=15_000,       # ms
-    pruning_threshold=0.48,
-    pruning_threshold_type="fixed",
-    min_word_threshold=30,
-    excluded_tags=("nav", "footer", "header", "aside", "form", "iframe"),
-    max_retries=2,
-    retry_backoff=0.5,
-    semaphore_limit=6,
-    cache_mode="BYPASS",
-)
-```
+Click "Settings" below the input bar to configure:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Model | `llama3.1:8b-instruct-q8_0` | Ollama model for query generation |
+| Queries | `3` | Number of search queries to generate |
+| Results/Query | `3` | DuckDuckGo results per query |
+
+### API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/` | Web UI |
+| `POST` | `/api/research` | Start a research job |
+| `GET` | `/api/research/{id}/stream` | SSE progress stream |
+| `GET` | `/api/reports` | List all reports |
+| `GET` | `/api/reports/{id}` | Get report content |
+| `DELETE` | `/api/reports/{id}` | Delete a report |
+| `GET` | `/api/health` | Ollama connectivity check |
 
 ---
 
-## 📂 Project Structure
+## Configuration
+
+### Environment Variables
+
+See [.env.template](.env.template) for all options. Key variables:
+
+```bash
+# Ollama
+OLLAMA_HOST=http://localhost:11434
+OLLAMA_MODEL=llama3.1:8b-instruct-q8_0
+
+# Search
+SEARCH_NUM_QUERIES=3
+SEARCH_RESULTS_PER_QUERY=3
+
+# Scraper
+SCRAPER_PAGE_TIMEOUT=30000
+SCRAPER_SEMAPHORE_LIMIT=6
+
+# Web
+WEB_HOST=0.0.0.0
+WEB_PORT=8000
+VERBOSE=false
+```
+
+### CLI Arguments
+
+| Argument | Short | Default | Description |
+|----------|-------|---------|-------------|
+| `topic` | | (prompt) | Research topic |
+| `--output` | `-o` | `final_report.md` | Output file path |
+| `--model` | `-m` | `llama3.1:8b-instruct-q8_0` | Ollama model |
+| `--host` | | `http://localhost:11434` | Ollama server URL |
+| `--num-queries` | `-n` | `3` | Number of queries |
+| `--top` | | `3` | Results per query |
+| `--verbose` | `-v` | `false` | Debug logging |
+
+---
+
+## Project Structure
 
 ```
 local-research-agent/
-├── main.py                 # Main orchestrator (LangGraph pipeline)
-├── searcher.py             # Query generator + DuckDuckGo search module
-├── scraper.py              # Crawl4AI-based web scraper module
-├── spec.md                 # Original project specification
-├── requirements.txt        # Python dependencies
-├── .gitignore              # Git ignore patterns
-├── README.md               # This file
-├── LICENSE                 # MIT License
-├── CONTRIBUTING.md         # Contribution guidelines
-├── final_report.md         # Generated research report (example)
-└── __pycache__/            # Python bytecode (gitignored)
+├── main.py                          # LangGraph pipeline orchestrator
+├── searcher.py                      # LLM query generation + DuckDuckGo search
+├── scraper.py                       # Crawl4AI web scraper
+├── run_web.py                       # Web server entry point
+│
+├── web/                             # Web application package
+│   ├── server.py                    # FastAPI routes + SSE streaming
+│   ├── runner.py                    # Job management (API ↔ pipeline bridge)
+│   ├── models.py                    # Pydantic request/response models
+│   ├── report_store.py              # Report CRUD (JSON + markdown files)
+│   ├── static/
+│   │   ├── css/style.css            # Dark-mode theme
+│   │   └── js/
+│   │       ├── api.js               # API client
+│   │       ├── app.js               # Hash router + sidebar
+│   │       ├── research.js          # Research form + SSE progress
+│   │       ├── history.js           # Report history (sidebar)
+│   │       └── report.js            # Report viewer
+│   └── templates/
+│       └── index.html               # Single-page HTML shell
+│
+├── Dockerfile                       # Production container image
+├── docker-compose.host-ollama.yml   # Docker Compose — host Ollama (recommended)
+├── docker-compose.yml               # Docker Compose — fully dockerized
+├── docker-compose.web.yml           # Docker Compose — web override
+│
+├── requirements.txt                 # Python dependencies
+├── pyproject.toml                   # Project metadata
+├── .env.template                    # Environment variable reference
+├── .dockerignore                    # Docker build exclusions
+├── .gitignore                       # Git ignore patterns
+├── verify-docker.sh                 # Automated verification script
+├── DOCKER.md                        # Docker deployment guide
+├── LICENSE                          # MIT License
+└── reports/                         # Generated reports (git-ignored)
 ```
 
 ---
 
-## 🔍 How It Works
+## Docker Deployment
 
-### 1. **Query Generation** ([searcher.py](searcher.py))
-- Sends the research topic to Ollama (Llama 3.1-8B)
-- LLM generates N diverse queries (default: 3) from different angles
-- Queries are parsed and validated
+### Recommended: Host Ollama
 
-### 2. **Web Search** ([searcher.py](searcher.py))
-- Each query is executed against DuckDuckGo in parallel
-- Results are collected and URLs are deduplicated
-- Metadata (title, snippet, source query) is preserved
+```bash
+# Start web UI
+docker compose -f docker-compose.host-ollama.yml up
 
-### 3. **Content Extraction** ([scraper.py](scraper.py))
-- URLs are fetched concurrently using Crawl4AI's `AsyncWebCrawler`
-- `PruningContentFilter` removes boilerplate (nav, footer, ads)
-- Clean markdown is extracted from main content
-
-### 4. **Report Compilation** ([main.py](main.py))
-- Scraped content is assembled into a structured markdown report
-- Table of contents with anchors is auto-generated
-- Metadata includes timing, success/failure counts, and source URLs
-
-### 5. **LangGraph Orchestration** ([main.py](main.py))
-```python
-StateGraph:
-  START → search_node → scrape_node → END
+# Open http://localhost:8000
 ```
 
-- **State**: Shared dict with `topic`, `urls`, `scraped_content`, `errors`, `elapsed_ms`
-- **search_node**: Calls `DeepSearcher.search()` → returns `urls`
-- **scrape_node**: Calls `DeepFetcher.fetch_many()` → returns `scraped_content` + `errors`
+### Fully Dockerized (Ollama in container)
+
+```bash
+# Start everything
+docker compose up -d
+
+# Pull model (first time)
+docker exec research-ollama ollama pull llama3.1:8b-instruct-q8_0
+
+# Add web UI
+docker compose -f docker-compose.yml -f docker-compose.web.yml up
+```
+
+### CLI via Docker
+
+```bash
+docker compose -f docker-compose.host-ollama.yml run --rm research-agent \
+  python main.py "your topic" -o /app/reports/output.md
+```
+
+### Verification
+
+```bash
+chmod +x verify-docker.sh
+./verify-docker.sh
+```
+
+For the complete Docker guide (resource limits, GPU support, troubleshooting, production hardening), see **[DOCKER.md](DOCKER.md)**.
 
 ---
 
-## 💡 Examples
+## Troubleshooting
 
-### Example 1: Research Latest AI Models
+### Web UI not loading
+
 ```bash
-python main.py "latest developments in large language models 2024"
+# Check server is running
+curl http://localhost:8000/api/health
+
+# Check logs
+python run_web.py  # Look for errors in terminal output
 ```
 
-### Example 2: Generate 5 Queries with 5 Results Each
+### Cannot connect to Ollama
+
 ```bash
-python main.py --num-queries 5 --top 5 "sustainable agriculture practices"
-```
-
-### Example 3: Use a Different Model
-```bash
-# First, pull the model:
-ollama pull llama3.2
-
-# Then run:
-python main.py --model llama3.2 "ethical considerations in AI"
-```
-
-### Example 4: Verbose Debugging
-```bash
-python main.py -v "how does photosynthesis work"
-```
-
-### Example 5: Save to Custom Location
-```bash
-python main.py -o ~/Documents/research_reports/quantum.md "quantum entanglement applications"
-```
-
----
-
-## 🐛 Troubleshooting
-
-### Issue: `Connection refused` error
-
-**Cause**: Ollama server is not running.
-
-**Solution**:
-```bash
+# Ensure Ollama is running
 ollama serve
+
+# Verify it responds
+curl http://localhost:11434/api/tags
 ```
 
-Keep this terminal running, and execute the agent in a new terminal window.
+### Model not found
 
----
-
-### Issue: `Model not found` error
-
-**Cause**: The specified model hasn't been pulled.
-
-**Solution**:
 ```bash
 ollama pull llama3.1:8b-instruct-q8_0
 ```
 
----
+### Scraper timeouts
 
-### Issue: Scraper timeouts or failures
-
-**Cause**: Some websites block headless browsers or have slow response times.
-
-**Solution**: Adjust timeout values:
+Adjust timeouts via environment variables:
 ```bash
-# In scraper.py, modify FetcherConfig:
-request_timeout=30_000  # Increase to 30 seconds
+export SCRAPER_PAGE_TIMEOUT=60000
+python run_web.py
 ```
 
----
+### Empty or low-quality output
 
-### Issue: Empty markdown or low-quality output
-
-**Cause**: `PruningContentFilter` is too aggressive.
-
-**Solution**: Lower the pruning threshold:
-```python
-# In scraper.py, modify FetcherConfig:
-pruning_threshold=0.3  # Lower = less aggressive pruning
-```
-
----
-
-### Issue: `crawl4ai-setup` command not found
-
-**Cause**: Crawl4AI package not installed correctly.
-
-**Solution**:
+Lower the pruning threshold:
 ```bash
-pip uninstall crawl4ai
-pip install --upgrade crawl4ai
-crawl4ai-setup
+export SCRAPER_PRUNING_THRESHOLD=0.3
+python run_web.py
+```
+
+### Docker build fails
+
+```bash
+DOCKER_BUILDKIT=1 docker build -t research-agent:latest .
 ```
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
-Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for:
-- Code of Conduct
-- Development setup
-- Pull request process
-- Coding standards
-
-### Quick Contribution Steps
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
+3. Commit your changes
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
 ---
----
 
-## 🙏 Acknowledgments
+## License
 
-- **[LangGraph](https://github.com/langchain-ai/langgraph)** by LangChain AI for the state-management framework
-- **[Crawl4AI](https://github.com/unclecode/crawl4ai)** by unclecode for the blazing-fast async web crawler
-- **[Ollama](https://ollama.ai/)** for making local LLM inference effortless
-- **[DuckDuckGo](https://duckduckgo.com/)** for privacy-focused search
-- **Meta AI** for the Llama 3.1 model
+This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
-## 📧 Contact
+## Acknowledgments
 
-**Yashasvi Udayan**
-- GitHub: [@yashasviudayan-py](https://github.com/yashasviudayan-py)
-
----
-
-## ⭐ Star History
-
-If you find this project useful, please consider giving it a star! It helps others discover this work.
+- [LangGraph](https://github.com/langchain-ai/langgraph) — State-management framework
+- [Crawl4AI](https://github.com/unclecode/crawl4ai) — Async web crawler
+- [Ollama](https://ollama.ai/) — Local LLM inference
+- [FastAPI](https://fastapi.tiangolo.com/) — Async Python web framework
+- [DuckDuckGo](https://duckduckgo.com/) — Privacy-focused search
+- [Meta AI](https://ai.meta.com/) — Llama 3.1 model
 
 ---
 
-**Built with ❤️ for privacy-first AI research**
+**Built for privacy-first AI research**
