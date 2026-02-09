@@ -28,6 +28,22 @@
     --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+[data-theme="light"] {
+    --bg: #f5f5f5;
+    --bg-elevated: #ffffff;
+    --bg-card: #ffffff;
+    --bg-input: #e8e8e8;
+    --bg-hover: #e0e0e0;
+    --text: #111111;
+    --text-secondary: #555555;
+    --text-muted: #999999;
+    --border: #d4d4d4;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --success: #16a34a;
+    --error: #dc2626;
+}
+
 html, body {
     height: 100%;
     background: var(--bg);
@@ -114,6 +130,7 @@ a:hover { text-decoration: underline; }
     transition: opacity var(--transition);
     z-index: 99;
 }
+[data-theme="light"] .sidebar-overlay { background: rgba(0, 0, 0, 0.3); }
 .sidebar-overlay.visible { opacity: 1; pointer-events: auto; }
 
 .sidebar-header {
@@ -212,6 +229,11 @@ a:hover { text-decoration: underline; }
     background: linear-gradient(135deg, #fff 0%, #666 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+[data-theme="light"] .welcome-title {
+    background: linear-gradient(135deg, #111 0%, #666 100%);
+    -webkit-background-clip: text;
     background-clip: text;
 }
 
@@ -328,9 +350,10 @@ a:hover { text-decoration: underline; }
 
 .settings-grid {
     display: grid;
-    grid-template-columns: 2fr 1fr 1fr;
+    grid-template-columns: 2fr 1fr 1fr auto;
     gap: 12px;
     padding: 12px 0 4px;
+    align-items: end;
 }
 .settings-grid label {
     display: flex;
@@ -351,6 +374,33 @@ a:hover { text-decoration: underline; }
     transition: border-color 0.2s ease;
 }
 .settings-grid input:focus { border-color: var(--accent); }
+
+/* Theme Toggle */
+.theme-toggle {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+.theme-toggle-btn {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 7px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text);
+    font-size: 18px;
+    transition: all 0.2s ease;
+    line-height: 1;
+}
+.theme-toggle-btn:hover {
+    border-color: var(--accent);
+    background: var(--bg-hover);
+}
 
 /* ═══ Progress Panel ═══ */
 .progress-view {
@@ -644,6 +694,6 @@ a:hover { text-decoration: underline; }
 @media (max-width: 640px) {
     .sidebar { width: 85%; }
     .complete-stats { grid-template-columns: repeat(2, 1fr); }
-    .settings-grid { grid-template-columns: 1fr; }
+    .settings-grid { grid-template-columns: 1fr 1fr; }
     .welcome-title { font-size: 22px; }
 }
