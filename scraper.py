@@ -140,6 +140,22 @@ def validate_url(url: str) -> str:
 # ──────────────────────────────────────────────────────────────────────
 # Configuration
 # ──────────────────────────────────────────────────────────────────────
+def _safe_int(env_key: str, default: int) -> int:
+    """Parse an env var as int, falling back to default on bad input."""
+    try:
+        return int(os.getenv(env_key, str(default)))
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_float(env_key: str, default: float) -> float:
+    """Parse an env var as float, falling back to default on bad input."""
+    try:
+        return float(os.getenv(env_key, str(default)))
+    except (ValueError, TypeError):
+        return default
+
+
 @dataclass(frozen=True)
 class FetcherConfig:
     """Tuneable knobs — safe defaults optimised for Apple Silicon M4 Pro."""
@@ -148,11 +164,11 @@ class FetcherConfig:
     verbose: bool = os.getenv("VERBOSE", "false").lower() == "true"
 
     # Browser / page behaviour
-    page_timeout: int = int(os.getenv("SCRAPER_PAGE_TIMEOUT", "30000"))
-    request_timeout: int = int(os.getenv("SCRAPER_REQUEST_TIMEOUT", "15000"))
+    page_timeout: int = _safe_int("SCRAPER_PAGE_TIMEOUT", 30000)
+    request_timeout: int = _safe_int("SCRAPER_REQUEST_TIMEOUT", 15000)
 
     # PruningContentFilter
-    pruning_threshold: float = float(os.getenv("SCRAPER_PRUNING_THRESHOLD", "0.48"))
+    pruning_threshold: float = _safe_float("SCRAPER_PRUNING_THRESHOLD", 0.48)
     pruning_threshold_type: str = "fixed"
     min_word_threshold: int = 30
 
@@ -163,11 +179,11 @@ class FetcherConfig:
     )
 
     # Retry / resilience
-    max_retries: int = int(os.getenv("SCRAPER_MAX_RETRIES", "2"))
+    max_retries: int = _safe_int("SCRAPER_MAX_RETRIES", 2)
     retry_backoff: float = 0.5
 
     # Concurrency ceiling (keeps memory stable on unified-memory Macs)
-    semaphore_limit: int = int(os.getenv("SCRAPER_SEMAPHORE_LIMIT", "6"))
+    semaphore_limit: int = _safe_int("SCRAPER_SEMAPHORE_LIMIT", 6)
     cache_mode: str = os.getenv("CACHE_MODE", "BYPASS")
 
 

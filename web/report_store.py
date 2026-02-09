@@ -66,7 +66,8 @@ def list_reports() -> list[ReportSummary]:
         try:
             data = json.loads(meta_path.read_text(encoding="utf-8"))
             reports.append(ReportSummary(**data))
-        except (json.JSONDecodeError, KeyError):
+        except Exception:
+            # Skip corrupt/invalid JSON or metadata that fails Pydantic validation
             continue
     reports.sort(key=lambda r: r.created_at, reverse=True)
     return reports
@@ -84,9 +85,12 @@ def get_report(report_id: str) -> Optional[ReportDetail]:
     if not meta_path.exists() or not md_path.exists():
         return None
 
-    meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    content = md_path.read_text(encoding="utf-8")
-    return ReportDetail(**meta, content=content)
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        content = md_path.read_text(encoding="utf-8")
+        return ReportDetail(**meta, content=content)
+    except Exception:
+        return None
 
 
 def delete_report(report_id: str) -> bool:

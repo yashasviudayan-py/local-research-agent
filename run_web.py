@@ -30,7 +30,10 @@ if __name__ == "__main__":
     _configure_logging()
 
     host = os.getenv("WEB_HOST", "0.0.0.0")
-    port = int(os.getenv("WEB_PORT", "8000"))
+    try:
+        port = int(os.getenv("WEB_PORT", "8000"))
+    except ValueError:
+        port = 8000
 
     print()
     print("  ┌────────────────────────────────────────────┐")

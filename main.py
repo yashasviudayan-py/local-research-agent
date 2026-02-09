@@ -111,76 +111,86 @@ class ResearchState(TypedDict):
 
 
 # ══════════════════════════════════════════════════════════════════════
-# 2. SEARCH NODE
+# 2. SEARCH NODE FACTORY
 # ══════════════════════════════════════════════════════════════════════
-async def search_node(state: ResearchState) -> dict[str, Any]:
-    """Generate diverse search queries via Ollama and collect URLs.
+def make_search_node(
+    searcher_config: SearcherConfig,
+    progress_callback=None,
+):
+    """Create a search node bound to its own config (no globals)."""
 
-    Reads ``state["topic"]`` and the module-level ``_searcher_config``.
-    Returns a partial state update with ``urls``.
-    """
-    topic = state["topic"]
-    logger.info("🔍  SEARCH NODE — topic: %r", topic)
+    async def search_node(state: ResearchState) -> dict[str, Any]:
+        """Generate diverse search queries via Ollama and collect URLs."""
+        topic = state["topic"]
+        logger.info("🔍  SEARCH NODE — topic: %r", topic)
 
-    searcher = DeepSearcher(_searcher_config, progress_callback=_progress_callback)
-    report = await searcher.search(topic)
+        searcher = DeepSearcher(searcher_config, progress_callback=progress_callback)
+        report = await searcher.search(topic)
 
-    logger.info(
-        "Search complete: %d queries → %d unique URLs",
-        len(report.queries), len(report.unique_urls),
-    )
+        logger.info(
+            "Search complete: %d queries → %d unique URLs",
+            len(report.queries), len(report.unique_urls),
+        )
 
-    for i, q in enumerate(report.queries, 1):
-        logger.info("  Query %d: %s", i, q)
+        for i, q in enumerate(report.queries, 1):
+            logger.info("  Query %d: %s", i, q)
 
-    return {"urls": report.unique_urls}
+        return {"urls": report.unique_urls}
+
+    return search_node
 
 
 # ══════════════════════════════════════════════════════════════════════
-# 3. SCRAPE NODE
+# 3. SCRAPE NODE FACTORY
 # ══════════════════════════════════════════════════════════════════════
-async def scrape_node(state: ResearchState) -> dict[str, Any]:
-    """Scrape all URLs in parallel using DeepFetcher.
+def make_scrape_node(
+    fetcher_config: FetcherConfig,
+    progress_callback=None,
+):
+    """Create a scrape node bound to its own config (no globals)."""
 
-    Reads ``state["urls"]``, fetches each concurrently, and returns
-    partial state updates for ``scraped_content`` and ``errors``.
-    """
-    urls = state.get("urls", [])
-    if not urls:
-        logger.warning("No URLs to scrape — search returned empty results")
-        return {"scraped_content": {}, "errors": {}}
+    async def scrape_node(state: ResearchState) -> dict[str, Any]:
+        """Scrape all URLs in parallel using DeepFetcher."""
+        urls = state.get("urls", [])
+        if not urls:
+            logger.warning("No URLs to scrape — search returned empty results")
+            return {"scraped_content": {}, "errors": {}}
 
-    logger.info("📄  SCRAPE NODE — fetching %d URLs in parallel…", len(urls))
+        logger.info("📄  SCRAPE NODE — fetching %d URLs in parallel…", len(urls))
 
-    scraped: dict[str, str] = {}
-    errors: dict[str, str] = {}
+        scraped: dict[str, str] = {}
+        errors: dict[str, str] = {}
 
-    async with DeepFetcher(_fetcher_config, progress_callback=_progress_callback) as fetcher:
-        results = await fetcher.fetch_many(urls)
+        async with DeepFetcher(fetcher_config, progress_callback=progress_callback) as fetcher:
+            results = await fetcher.fetch_many(urls)
 
-    for result in results:
-        if result.success and result.raw_markdown:
-            scraped[result.url] = result.raw_markdown
-            logger.info(
-                "  ✅ %s — %d chars (%.0f ms)",
-                result.url, len(result.raw_markdown), result.elapsed_ms,
-            )
-        else:
-            error_msg = result.error or "Empty content"
-            errors[result.url] = error_msg
-            logger.warning("  ❌ %s — %s", result.url, error_msg)
+        _MAX_CONTENT_CHARS = 100_000  # 100KB per page to prevent OOM
 
-    logger.info(
-        "Scrape complete: %d succeeded, %d failed",
-        len(scraped), len(errors),
-    )
-    return {"scraped_content": scraped, "errors": errors}
+        for result in results:
+            if result.success and result.raw_markdown:
+                scraped[result.url] = result.raw_markdown[:_MAX_CONTENT_CHARS]
+                logger.info(
+                    "  ✅ %s — %d chars (%.0f ms)",
+                    result.url, len(result.raw_markdown), result.elapsed_ms,
+                )
+            else:
+                error_msg = result.error or "Empty content"
+                errors[result.url] = error_msg
+                logger.warning("  ❌ %s — %s", result.url, error_msg)
+
+        logger.info(
+            "Scrape complete: %d succeeded, %d failed",
+            len(scraped), len(errors),
+        )
+        return {"scraped_content": scraped, "errors": errors}
+
+    return scrape_node
 
 
 # ══════════════════════════════════════════════════════════════════════
 # 4. GRAPH CONSTRUCTION
 # ══════════════════════════════════════════════════════════════════════
-def build_graph() -> Any:
+def build_graph(search_fn, scrape_fn) -> Any:
     """Build and compile the LangGraph StateGraph.
 
     Graph topology:
@@ -188,8 +198,8 @@ def build_graph() -> Any:
     """
     graph = StateGraph(ResearchState)
 
-    graph.add_node("search_node", search_node)
-    graph.add_node("scrape_node", scrape_node)
+    graph.add_node("search_node", search_fn)
+    graph.add_node("scrape_node", scrape_fn)
 
     graph.add_edge(START, "search_node")
     graph.add_edge("search_node", "scrape_node")
@@ -201,6 +211,16 @@ def build_graph() -> Any:
 # ══════════════════════════════════════════════════════════════════════
 # 5. REPORT GENERATION
 # ══════════════════════════════════════════════════════════════════════
+def _sanitize_md(text: str) -> str:
+    """Strip HTML tags and dangerous markdown patterns from external content."""
+    import re as _re
+    # Remove HTML tags (prevents XSS when markdown is rendered to HTML)
+    text = _re.sub(r"<[^>]+>", "", text)
+    # Remove javascript: URLs
+    text = _re.sub(r"\[([^\]]*)\]\(javascript:[^)]*\)", r"\1", text, flags=_re.IGNORECASE)
+    return text
+
+
 def generate_report(final_state: dict[str, Any]) -> str:
     """Assemble the final markdown report from scraped content."""
     topic = final_state.get("topic", "Unknown")
@@ -234,16 +254,16 @@ def generate_report(final_state: dict[str, Any]) -> str:
     for i, (url, content) in enumerate(scraped.items(), 1):
         anchor = f"source-{i}"
         sections.append(f'## <a id="{anchor}"></a>Source {i}\n')
-        sections.append(f"**URL:** {url}\n")
+        sections.append(f"**URL:** {_sanitize_md(url)}\n")
         sections.append(f"**Length:** {len(content):,} characters\n")
-        sections.append(content.strip())
+        sections.append(_sanitize_md(content.strip()))
         sections.append("\n\n---\n")
 
     # ── Errors ────────────────────────────────────────────────────────
     if errors:
         sections.append("## Failed URLs\n")
         for url, err in errors.items():
-            sections.append(f"- **{url}**: {err}")
+            sections.append(f"- **{_sanitize_md(url)}**: {_sanitize_md(err)}")
         sections.append("\n")
 
     return "\n".join(sections)
@@ -304,13 +324,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-n", "--num-queries",
         type=int,
-        default=int(os.getenv("SEARCH_NUM_QUERIES", "3")),
+        default=SearcherConfig().num_queries,
         help="Number of search queries to generate (default: $SEARCH_NUM_QUERIES or 3).",
     )
     parser.add_argument(
         "--top",
         type=int,
-        default=int(os.getenv("SEARCH_RESULTS_PER_QUERY", "3")),
+        default=SearcherConfig().results_per_query,
         help="Results per search query (default: $SEARCH_RESULTS_PER_QUERY or 3).",
     )
     parser.add_argument(
@@ -340,15 +360,7 @@ def resolve_topic(args_topic: Optional[str]) -> str:
 
 
 # ══════════════════════════════════════════════════════════════════════
-# 7. MODULE-LEVEL CONFIG (set by async_main, read by nodes)
-# ══════════════════════════════════════════════════════════════════════
-_searcher_config: SearcherConfig = SearcherConfig()
-_fetcher_config: FetcherConfig = FetcherConfig()
-_progress_callback = None
-
-
-# ══════════════════════════════════════════════════════════════════════
-# 8. REUSABLE PIPELINE (used by both CLI and web API)
+# 7. REUSABLE PIPELINE (used by both CLI and web API)
 # ══════════════════════════════════════════════════════════════════════
 async def run_research(
     topic: str,
@@ -359,13 +371,13 @@ async def run_research(
     """Run the research pipeline. Returns the final state dict.
 
     This is the shared core used by both CLI and web API.
+    Each invocation creates its own node closures, so concurrent
+    calls never share mutable state.
     """
-    global _searcher_config, _fetcher_config, _progress_callback
-    _searcher_config = searcher_config
-    _fetcher_config = fetcher_config
-    _progress_callback = progress_callback
+    search_fn = make_search_node(searcher_config, progress_callback)
+    scrape_fn = make_scrape_node(fetcher_config, progress_callback)
 
-    app = build_graph()
+    app = build_graph(search_fn, scrape_fn)
     initial_state: ResearchState = {
         "topic": topic,
         "urls": [],

@@ -354,8 +354,8 @@ a:hover { text-decoration: underline; }
 
 /* ═══ Progress Panel ═══ */
 .progress-view {
-    padding: 24px 20px;
-    max-width: 700px;
+    padding: 24px 40px;
+    max-width: 100%;
     margin: 0 auto;
 }
 
@@ -502,8 +502,8 @@ a:hover { text-decoration: underline; }
 
 /* ═══ Report View ═══ */
 .report-view {
-    padding: 24px 20px;
-    max-width: 800px;
+    padding: 24px 40px;
+    max-width: 100%;
     margin: 0 auto;
 }
 
@@ -542,7 +542,7 @@ a:hover { text-decoration: underline; }
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 32px;
+    padding: 32px 40px;
     line-height: 1.8;
 }
 .report-body h1 { font-size: 24px; margin-bottom: 16px; }

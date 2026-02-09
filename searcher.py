@@ -105,6 +105,22 @@ class SearchReport:
 # ──────────────────────────────────────────────────────────────────────
 # Configuration
 # ──────────────────────────────────────────────────────────────────────
+def _safe_int(env_key: str, default: int) -> int:
+    """Parse an env var as int, falling back to default on bad input."""
+    try:
+        return int(os.getenv(env_key, str(default)))
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_float(env_key: str, default: float) -> float:
+    """Parse an env var as float, falling back to default on bad input."""
+    try:
+        return float(os.getenv(env_key, str(default)))
+    except (ValueError, TypeError):
+        return default
+
+
 @dataclass(frozen=True)
 class SearcherConfig:
     """Tuneable knobs for DeepSearcher."""
@@ -112,20 +128,20 @@ class SearcherConfig:
     # Ollama
     model: str = os.getenv("OLLAMA_MODEL", "llama3.1:8b-instruct-q8_0")
     ollama_host: str = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-    ollama_timeout: float = float(os.getenv("OLLAMA_TIMEOUT", "60.0"))
+    ollama_timeout: float = _safe_float("OLLAMA_TIMEOUT", 60.0)
 
     # Query generation
-    num_queries: int = int(os.getenv("SEARCH_NUM_QUERIES", "3"))
+    num_queries: int = _safe_int("SEARCH_NUM_QUERIES", 3)
     temperature: float = 0.7            # higher = more diverse queries
 
     # DuckDuckGo
-    results_per_query: int = int(os.getenv("SEARCH_RESULTS_PER_QUERY", "3"))
+    results_per_query: int = _safe_int("SEARCH_RESULTS_PER_QUERY", 3)
     search_region: str = os.getenv("SEARCH_REGION", "wt-wt")
     search_safesearch: str = os.getenv("SEARCH_SAFESEARCH", "moderate")
     search_timelimit: Optional[str] = os.getenv("SEARCH_TIMELIMIT", None)
 
     # Concurrency
-    max_concurrent_searches: int = int(os.getenv("MAX_CONCURRENT_SEARCHES", "3"))
+    max_concurrent_searches: int = _safe_int("MAX_CONCURRENT_SEARCHES", 3)
 
 
 # ──────────────────────────────────────────────────────────────────────

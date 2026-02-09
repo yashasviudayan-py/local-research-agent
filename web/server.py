@@ -123,6 +123,22 @@ async def stream_progress(job_id: str):
         raise HTTPException(404, "Job not found")
 
     async def event_generator():
+        # If job already finished, send final status immediately
+        if job.status == "completed" and job.report_id:
+            data = json.dumps({
+                "report_id": job.report_id,
+                "elapsed_ms": job.elapsed_ms,
+                "urls_found": job.urls_found,
+                "pages_scraped": job.pages_scraped,
+                "pages_failed": job.pages_failed,
+            })
+            yield f"event: complete\ndata: {data}\n\n"
+            return
+        if job.status == "failed":
+            data = json.dumps({"message": job.error or "Unknown error"})
+            yield f"event: error\ndata: {data}\n\n"
+            return
+
         while True:
             try:
                 event = await asyncio.wait_for(job.events.get(), timeout=30.0)
@@ -133,6 +149,9 @@ async def stream_progress(job_id: str):
                 if event_type in ("complete", "error"):
                     break
             except asyncio.TimeoutError:
+                # Check if job finished while we were waiting
+                if job.status in ("completed", "failed"):
+                    break
                 # Send keepalive to prevent connection dropping
                 yield ": keepalive\n\n"
 
@@ -153,13 +172,13 @@ async def stream_progress(job_id: str):
 @app.get("/api/reports")
 async def list_reports():
     """List all saved reports."""
-    return report_store.list_reports()
+    return await asyncio.to_thread(report_store.list_reports)
 
 
 @app.get("/api/reports/{report_id}")
 async def get_report(report_id: str):
     """Get a specific report with content."""
-    report = report_store.get_report(report_id)
+    report = await asyncio.to_thread(report_store.get_report, report_id)
     if not report:
         raise HTTPException(404, "Report not found")
     return report
